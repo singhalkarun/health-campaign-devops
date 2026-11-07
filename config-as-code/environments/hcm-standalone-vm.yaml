@@ -60,7 +60,7 @@ cluster-configs:
                 spring-jpa-show-sql: "true"
                 timezone: "UTC"
                 tracer-errors-provideexceptionindetails: "true"
-                egov-internal-microservice-user-uuid: fa0f820c-49df-46bb-8e62-8a0ec5d9af5e
+                egov-internal-microservice-user-uuid: fa0f820c-49df-46bb-8e62-8a0ec5d9af5e   # replace with the uuid of the INTERNAL_MICROSERVICE_ROLE user in your database (README 5.1)
                 db-schema-names: "demo"
                 boundary-hierarchy: "ADMIN"
 
@@ -1862,12 +1862,12 @@ elasticsearch-master:
         resources:
             requests:
                 storage: 20Gi
-    esJavaOpts: "-Xmx448m -Xms448m"
+    esJavaOpts: "-Xmx1g -Xms1g"   # single master also coordinates; 448m was OOM-killed
     resources:
         requests:
-            memory: "448Mi"
+            memory: "1Gi"
         limits:
-            memory: "896Mi"
+            memory: "2Gi"
 
 
 pgadmin:
