@@ -1,0 +1,100 @@
+# In-cluster MinIO (S3 API) for egov-filestore on a standalone VM (replaces S3 / Azure Blob).
+# Credentials come from the `minio` secret that cluster-configs creates in `backbone`
+# (cluster-configs.secrets.minio.accesskey/secretkey; use the same values as egov-filestore aws-key/aws-secret-key).
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: backbone
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: backbone
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: egovio/minio:RELEASE.2024-01-16T16-07-38Z   # eGov mirror; MinIO no longer publishes public images
+          args: ["server", "/data", "--console-address", ":9001"]
+          ports:
+            - containerPort: 9000
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio
+                  key: accesskey
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio
+                  key: secretkey
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 50Gi
+---
+# Creates the filestore bucket (must match egov-filestore fixed-bucketname in the environment file).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-create-bucket
+  namespace: backbone
+spec:
+  backoffLimit: 20
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: egovio/minio:RELEASE.2024-01-16T16-07-38Z   # includes the mc client
+          env:
+            - name: BUCKET
+              value: hcm-filestore
+            - name: AK
+              valueFrom:
+                secretKeyRef:
+                  name: minio
+                  key: accesskey
+            - name: SK
+              valueFrom:
+                secretKeyRef:
+                  name: minio
+                  key: secretkey
+          command: ["sh", "-c", "mc alias set local http://minio.backbone:9000 \"$AK\" \"$SK\" && mc mb --ignore-existing local/$BUCKET"]
