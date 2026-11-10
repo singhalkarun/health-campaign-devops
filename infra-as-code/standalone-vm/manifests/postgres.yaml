@@ -1,6 +1,8 @@
 # In-cluster PostgreSQL for a standalone VM (replaces the managed cloud database).
 # Credentials come from the `db` secret that cluster-configs creates in the `backbone`
 # namespace (add `backbone` to cluster-configs.secrets.db.namespace in your secrets file).
+# SSL is on (optional for clients): the project-factory image always connects with SSL and
+# ignores DB_SSL. A fresh self-signed certificate is generated at every pod start.
 apiVersion: v1
 kind: Service
 metadata:
@@ -29,10 +31,24 @@ spec:
       labels:
         app: postgres
     spec:
+      initContainers:
+        - name: tls
+          image: postgres:14
+          command:
+            - sh
+            - -c
+            - >-
+              openssl req -x509 -nodes -newkey rsa:2048 -days 3650 -subj /CN=postgres.backbone
+              -keyout /tls/server.key -out /tls/server.crt &&
+              chown 999:999 /tls/server.key /tls/server.crt && chmod 600 /tls/server.key
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
       containers:
         - name: postgres
           image: postgres:14
-          args: ["-c", "max_connections=1000", "-c", "shared_buffers=2GB"]
+          args: ["-c", "max_connections=1000", "-c", "shared_buffers=2GB",
+                 "-c", "ssl=on", "-c", "ssl_cert_file=/tls/server.crt", "-c", "ssl_key_file=/tls/server.key"]
           ports:
             - containerPort: 5432
           env:
@@ -65,7 +81,11 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: dshm
               mountPath: /dev/shm
+            - name: tls
+              mountPath: /tls
       volumes:
+        - name: tls
+          emptyDir: {}
         - name: dshm
           emptyDir:
             medium: Memory

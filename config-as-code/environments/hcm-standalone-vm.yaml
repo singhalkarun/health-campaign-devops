@@ -1839,12 +1839,12 @@ elasticsearch-data:
         resources:
             requests:
                 storage: 50Gi
-    esJavaOpts: "-Xmx2000M -Xms2000M"
+    esJavaOpts: "-Xmx2g -Xms2g"   # heap is about half the limit; 2000M heap in 2.5Gi was OOM-killed
     resources:
         requests:
-            memory: "2Gi"
+            memory: "3Gi"
         limits:
-            memory: "2.5Gi"
+            memory: "4Gi"
 
 
 elasticsearch-master:
