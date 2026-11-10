@@ -205,3 +205,31 @@ echo "127.0.0.1 hcm.internal" | sudo tee -a /etc/hosts
 ```
 
 Open `https://hcm.internal/console` and accept the self-signed certificate warning. Log in with the superuser created in 5.1 (city/tenant `demo`).
+
+### 6.1 Public domain (optional)
+
+To serve HCM on a real domain with a Let's Encrypt certificate instead of the tunnel:
+
+1. Give the VM a static public IP and point an `A` record for your domain at it.
+2. Open inbound TCP 80 and 443 to everyone (Let's Encrypt validates over port 80; the VM's own services also call the domain).
+3. Forward host ports 80/443 to the ingress NodePorts on every boot with [`scripts/ingress-ports.sh`](scripts/ingress-ports.sh):
+   ```bash
+   sudo install -m 755 $SA/scripts/ingress-ports.sh /usr/local/sbin/hcm-ingress-ports.sh
+   sudo tee /etc/systemd/system/hcm-ingress-ports.service >/dev/null <<'UNIT'
+   [Unit]
+   Description=Forward host 80/443 to minikube ingress NodePorts
+   After=docker.service
+   PartOf=docker.service
+   [Service]
+   Type=oneshot
+   RemainAfterExit=yes
+   ExecStart=/usr/local/sbin/hcm-ingress-ports.sh
+   [Install]
+   WantedBy=multi-user.target docker.service
+   UNIT
+   sudo systemctl daemon-reload && sudo systemctl enable --now hcm-ingress-ports
+   ```
+4. In the env file, replace `hcm.internal` with your domain everywhere and set both `cert-issuer` values to `letsencrypt-prod`.
+5. Re-deploy cluster configs, `ingress-nginx` and every application (the same commands as in section 5), re-run `assets/deploy-assets.sh <domain>`, then `kubectl -n egov rollout restart deploy` so the services read the new domain.
+
+cert-manager waits until its own check of `http://<domain>/.well-known/acme-challenge/...` succeeds before it contacts Let's Encrypt, so you can re-deploy before opening the ports.
