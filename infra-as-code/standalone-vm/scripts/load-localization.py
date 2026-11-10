@@ -5,7 +5,9 @@ v2.1 publishes no localization seed. This downloads the messages for the given m
 a source instance (eGov's public demo by default), merges them and upserts them into the
 target tenant through the target's localization API.
 
-Merge order for each target locale: later sources override earlier ones (same code+module).
+For each target locale and module, the messages come from the highest-priority source that has
+that module at all (sources are not mixed within a module). This mirrors what eGov's demo serves
+and keeps the label set small enough for the browser's local-storage cache.
 
   download:  python3 -I load-localization.py download out.json
   upload:    HCM_USER=... HCM_PASSWORD=... python3 -I load-localization.py upload out.json https://<domain> <tenant>
@@ -17,8 +19,8 @@ import json, os, sys, time, urllib.parse, urllib.request, base64
 SRC = "https://health-demo.digit.org"
 # target locale -> list of (source tenant, source locale), lowest priority first.
 # The UIs append their localeRegion ("DEMO" in assets/deploy-assets.sh) to the language codes
-# in StateInfo, so the target tenant's locales are <lang>_DEMO. eGov's tenant `mz` has the
-# fullest set, `demo` its own overrides.
+# in StateInfo, so the target tenant's locales are <lang>_DEMO. eGov's tenant `demo` is used
+# where it has a module; tenant `mz` fills modules that `demo` lacks (e.g. rainmaker-common).
 SOURCES = {
     "en_DEMO": [("mz", "en_MZ"), ("demo", "en_MZ"), ("demo", "en_DEMO")],
     "pt_DEMO": [("mz", "pt_MZ"), ("demo", "pt_MZ"), ("demo", "pt_DEMO")],
@@ -32,7 +34,8 @@ hcm-common hcm-checklist hcm-reports hcm-delivery hcm-member hcm-household hcm-l
 hcm-beneficiary hcm-home hcm-forgot-password hcm-stock hcm-stock-reconciliation hcm-warehouse-details
 hcm-closedhousehold hcm-inventory-selection hcm-inventory-details hcm-attendance hcm-dashboard
 hcm-campaignmanager hcm-campaign-settings hcm-admin-schemas hcm-boundary-admin hcm-dss hcm-payments
-hcm-microplanning""".split()
+hcm-microplanning
+hcm-workbench hcm-appconfiguration""".split()  # last line: module names used by newer UI builds
 
 
 def post(url, body, headers=None, form=False):
@@ -69,10 +72,15 @@ def download(out):
     merged = {}
     for tloc, srcs in SOURCES.items():
         msgs = {}
-        for tenant, loc in srcs:
-            for m in MODULES:
+        used = {}
+        for m in MODULES:
+            for tenant, loc in reversed(srcs):  # highest priority first
                 q = urllib.parse.urlencode({"tenantId": tenant, "locale": loc, "module": m})
-                for x in post(f"{SRC}/localization/messages/v1/_search?{q}", {"RequestInfo": {}}).get("messages", []):
+                got = post(f"{SRC}/localization/messages/v1/_search?{q}", {"RequestInfo": {}}).get("messages", [])
+                if not got:
+                    continue
+                used[m] = f"{tenant}/{loc}"
+                for x in got:
                     # The service trims codes and compares them case-insensitively, so " X", "x"
                     # and "X" collide in one upsert. Keep one per key, preferring the upper-case code.
                     code = x["code"].strip()
@@ -80,8 +88,9 @@ def download(out):
                     prev = msgs.get(key)
                     keep = code if prev is None or code == code.upper() or prev[1] != prev[1].upper() else prev[1]
                     msgs[key] = (x["module"], keep, x["message"])
+                break
         merged[tloc] = [{"module": m, "code": c, "message": v, "locale": tloc} for m, c, v in msgs.values()]
-        print(f"{tloc}: {len(merged[tloc])} messages", flush=True)
+        print(f"{tloc}: {len(merged[tloc])} messages from {len(used)} modules", flush=True)
     json.dump(merged, open(out, "w"), ensure_ascii=False)
 
 

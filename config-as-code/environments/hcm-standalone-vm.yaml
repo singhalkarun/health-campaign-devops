@@ -166,7 +166,7 @@ workbench-ui:
   namespace: egov   # the js-injection ConfigMap template needs it
   image:
     repository: egovio/workbench-ui
-    tag: master-9fcd8db
+    tag: master-84d425a   # newer build, as run on eGov's public demo (Nov 2026); v2.1 env had master-9fcd8db
   custom-js-injection: |
     sub_filter.conf: "
       sub_filter  '<head>' '<head>
@@ -177,7 +177,7 @@ dashboard-ui:
   namespace: egov   # the js-injection ConfigMap template needs it
   image:
     repository: egovio/dashboard-ui
-    tag: master-88c8318
+    tag: master-0200474   # newer build, as run on eGov's public demo (Nov 2026); v2.1 env had master-88c8318
   custom-js-injection: |
     sub_filter.conf: "
       sub_filter  '<head>' '<head>
@@ -226,7 +226,7 @@ payments-ui:
   namespace: egov   # the js-injection ConfigMap template needs it
   image:
     repository: egovio/payments-ui
-    tag: HCMPRE-1111-883b1a7
+    tag: master-664fab0   # newer build, as run on eGov's public demo (Nov 2026); v2.1 env had HCMPRE-1111-883b1a7
   custom-js-injection: |
     sub_filter.conf: "
       sub_filter  '<head>' '<head>
@@ -237,7 +237,7 @@ console:
   namespace: egov   # the js-injection ConfigMap template needs it
   image:
     repository: egovio/console
-    tag: ondo-proxy-f806f086a2-149
+    tag: ondo-proxy-f806f086a2-149   # kept: newer console builds need a newer backend (My campaigns search fails against v2.1 project-factory)
   central-instance-name: egov
   central-instance-build: true
   central-instance-enabled: true

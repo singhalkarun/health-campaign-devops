@@ -187,7 +187,7 @@ Follow [Setup System Data](https://docs.digit.org/health/deploy/installation/set
 - In the workflow and superuser requests, use tenant `demo` instead of `mz`. Choose your own superuser name and password.
 - After the first start, set `egov-internal-microservice-user-uuid` in the env file to the uuid of the `INTERNAL_MICROSERVICE_ROLE` user that the services create, re-run cluster configs (`go run main.go deploy -c -e $ENV inbox`) and restart `inbox`:
   `select u.uuid from demo.eg_user u join demo.eg_userrole_v1 r on r.user_id=u.id where r.role_code='INTERNAL_MICROSERVICE_ROLE';`
-- Localization messages are not part of the published seed (the UI shows message keys without them). [`scripts/load-localization.py`](scripts/load-localization.py) copies them from eGov's public demo into `en_DEMO`, `pt_DEMO` and `fr_DEMO` (about 200k messages). A few texts exceed the 500-character `message` column; widen it first or they are skipped:
+- Localization messages are not part of the published seed (the UI shows message keys without them). [`scripts/load-localization.py`](scripts/load-localization.py) copies them from eGov's public demo into `en_DEMO`, `pt_DEMO` and `fr_DEMO` (about 170k messages; per module it uses eGov's `demo` tenant where it has the module and `mz` otherwise, which keeps the set small enough for the browser's local-storage cache). A few texts exceed the 500-character `message` column; widen it first or they are skipped:
   ```bash
   psql ... -c "alter table public.message alter column message type varchar(1000);"   # from the playground pod
   python3 -I $SA/scripts/load-localization.py download localization.json
