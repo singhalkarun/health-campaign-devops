@@ -187,7 +187,12 @@ Follow [Setup System Data](https://docs.digit.org/health/deploy/installation/set
 - In the workflow and superuser requests, use tenant `demo` instead of `mz`. Choose your own superuser name and password.
 - After the first start, set `egov-internal-microservice-user-uuid` in the env file to the uuid of the `INTERNAL_MICROSERVICE_ROLE` user that the services create, re-run cluster configs (`go run main.go deploy -c -e $ENV inbox`) and restart `inbox`:
   `select u.uuid from demo.eg_user u join demo.eg_userrole_v1 r on r.user_id=u.id where r.role_code='INTERNAL_MICROSERVICE_ROLE';`
-- Localization messages are not part of the published seed; until you load them, the UI shows message keys.
+- Localization messages are not part of the published seed (the UI shows message keys without them). [`scripts/load-localization.py`](scripts/load-localization.py) copies them from eGov's public demo (tenants `mz`/`demo`, locales `en_MZ`, `pt_MZ`, `fr_MZ`, `en_DEMO`) into your tenant, about 240k messages:
+  ```bash
+  python3 -I $SA/scripts/load-localization.py download localization.json
+  HCM_USER=<superuser> HCM_PASSWORD=<password> python3 -I $SA/scripts/load-localization.py upload localization.json https://<domain> demo
+  ```
+  The script de-duplicates codes the service treats as equal (trimmed, case-insensitive) and sends one module per request, because the upsert API rejects a request where the same code appears twice.
 
 ## 6. Access
 
