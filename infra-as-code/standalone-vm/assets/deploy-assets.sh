@@ -3,9 +3,13 @@
 # It downloads eGov's published demo configs once, removes eGov-specific keys/URLs and
 # serves them at https://<domain>/hcm-assets/ through an nginx pod.
 #
-# Usage: ./deploy-assets.sh <domain>        e.g. ./deploy-assets.sh hcm.internal
+# Usage: ./deploy-assets.sh <domain> [state-tenant]   e.g. ./deploy-assets.sh hcm.internal demo
+# Every config is pointed at the state tenant (eGov's core-ui/microplan/digit-ui configs use `mz`)
+# and at locale region <TENANT> upper-cased, which must match the StateInfo languages (README 5.1).
 set -euo pipefail
-DOMAIN="${1:?usage: $0 <domain>}"
+DOMAIN="${1:?usage: $0 <domain> [state-tenant]}"
+TENANT="${2:-demo}"
+REGION=$(echo "$TENANT" | tr a-z A-Z)
 NS=egov
 SRC=https://hcm-demo-assets.s3.ap-south-1.amazonaws.com/demo
 WORK=$(mktemp -d)
@@ -25,7 +29,13 @@ for js in "$WORK"/*.js; do
     -e 's#(googleClientId *= *)"[^"]*"#\1""#' \
     -e 's#https://(s3\.ap-south-1\.amazonaws\.com/egov-uat-assets|egov-uat-assets\.s3\.ap-south-1\.amazonaws\.com|unified-dev\.digit\.org/egov-dev-assets)/digit-footer#/hcm-assets/digit-footer#g' \
     -e "s#https://health-demo(-kibana)?\.digit\.org#https://${DOMAIN}#g" \
+    -e "s#(var stateTenantId *= *)['\"][^'\"]*['\"]#\1\"${TENANT}\"#" \
+    -e "s#(var localeRegion *= *)['\"][^'\"]*['\"]#\1\"${REGION}\"#" \
+    -e "s#(var defaultLocal *= *)['\"]([a-z]{2})_[A-Z]+['\"]#\1\"\2_${REGION}\"#" \
     "$js"
+  # digit-ui's configs have no locale region (the UI then falls back to "IN"): add one
+  grep -q 'LOCALE_REGION' "$js" || sed -i -E \
+    "s#if \(key === \"STATE_LEVEL_TENANT_ID\"\) \{#if (key === \"LOCALE_REGION\") {\n      return \"${REGION}\";\n    } else if (key === \"STATE_LEVEL_TENANT_ID\") {#" "$js"
 done
 
 kubectl -n "$NS" create configmap hcm-assets --from-file="$WORK" --dry-run=client -o yaml | kubectl apply -f -

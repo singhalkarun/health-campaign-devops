@@ -168,7 +168,7 @@ FRONTEND=digit-ui,microplan-ui,payments-ui,workbench-ui,console,core-ui,dashboar
 for s in $(echo $CORE,$MICROPLAN,$HEALTH,$FRONTEND | tr , ' '); do
   go run main.go deploy -e $ENV "$s" > "/tmp/deploy-${s##*/}.log" 2>&1 && echo "OK $s" || echo "FAIL $s"
 done
-$SA/assets/deploy-assets.sh hcm.internal
+$SA/assets/deploy-assets.sh hcm.internal demo   # domain, state tenant
 ```
 
 Notes:
@@ -183,16 +183,17 @@ Follow [Setup System Data](https://docs.digit.org/health/deploy/installation/set
 
 - The official dump `seed_data_dump_2_1.sql` is for tenant `mz` in schema `public`. This environment (like `hcm-demo-azure`) is a central instance with tenant `demo` and schema `demo`. Re-target the dump before loading it:
   `python3 -I scripts/retarget-seed.py seed_data_dump_2_1.sql seed_demo.sql demo demo`
-  then load `seed_demo.sql` from the playground pod as the docs show (DB host `postgres.backbone.svc.cluster.local`, credentials from your secrets file).
+  (it also changes the `StateInfo` languages from `en_MZ` etc. to `en_DEMO`: the UIs append their locale region `DEMO` to any language code that lacks it, so `en_MZ` would be requested as `en_MZDEMO`), then load `seed_demo.sql` from the playground pod as the docs show (DB host `postgres.backbone.svc.cluster.local`, credentials from your secrets file).
 - In the workflow and superuser requests, use tenant `demo` instead of `mz`. Choose your own superuser name and password.
 - After the first start, set `egov-internal-microservice-user-uuid` in the env file to the uuid of the `INTERNAL_MICROSERVICE_ROLE` user that the services create, re-run cluster configs (`go run main.go deploy -c -e $ENV inbox`) and restart `inbox`:
   `select u.uuid from demo.eg_user u join demo.eg_userrole_v1 r on r.user_id=u.id where r.role_code='INTERNAL_MICROSERVICE_ROLE';`
-- Localization messages are not part of the published seed (the UI shows message keys without them). [`scripts/load-localization.py`](scripts/load-localization.py) copies them from eGov's public demo (tenants `mz`/`demo`, locales `en_MZ`, `pt_MZ`, `fr_MZ`, `en_DEMO`) into your tenant, about 240k messages:
+- Localization messages are not part of the published seed (the UI shows message keys without them). [`scripts/load-localization.py`](scripts/load-localization.py) copies them from eGov's public demo into `en_DEMO`, `pt_DEMO` and `fr_DEMO` (about 200k messages). A few texts exceed the 500-character `message` column; widen it first or they are skipped:
   ```bash
+  psql ... -c "alter table public.message alter column message type varchar(1000);"   # from the playground pod
   python3 -I $SA/scripts/load-localization.py download localization.json
-  HCM_USER=<superuser> HCM_PASSWORD=<password> python3 -I $SA/scripts/load-localization.py upload localization.json https://<domain> demo
+  MAX_MESSAGE_LEN=1000 HCM_USER=<superuser> HCM_PASSWORD=<password> python3 -I $SA/scripts/load-localization.py upload localization.json https://<domain> demo
   ```
-  The script de-duplicates codes the service treats as equal (trimmed, case-insensitive) and sends one module per request, because the upsert API rejects a request where the same code appears twice.
+  The script de-duplicates codes the service treats as equal (trimmed, case-insensitive) and sends one module per request, because the upsert API rejects a request where the same code appears twice. Browsers cache labels in local storage: clear the site data after loading.
 
 ## 6. Access
 
@@ -235,6 +236,6 @@ To serve HCM on a real domain with a Let's Encrypt certificate instead of the tu
    sudo systemctl daemon-reload && sudo systemctl enable --now hcm-ingress-ports
    ```
 4. In the env file, replace `hcm.internal` with your domain everywhere and set both `cert-issuer` values to `letsencrypt-prod`.
-5. Re-deploy cluster configs, `ingress-nginx` and every application (the same commands as in section 5), re-run `assets/deploy-assets.sh <domain>`, then `kubectl -n egov rollout restart deploy` so the services read the new domain.
+5. Re-deploy cluster configs, `ingress-nginx` and every application (the same commands as in section 5), re-run `assets/deploy-assets.sh <domain> demo`, then `kubectl -n egov rollout restart deploy` so the services read the new domain.
 
 cert-manager waits until its own check of `http://<domain>/.well-known/acme-challenge/...` succeeds before it contacts Let's Encrypt, so you can re-deploy before opening the ports.

@@ -22,6 +22,11 @@ for line in open(src):
                 f[i] = TENANT; n += 1
             elif c in json_cols:
                 f[i] = f[i].replace('"mz"', '"%s"' % TENANT).replace('"mz.', '"%s.' % TENANT)
+        if "common-masters.StateInfo" in f and "data" in cols:
+            # UIs append their locale region (TENANT upper-cased, see assets/deploy-assets.sh)
+            # to these language codes, so en_MZ would become en_MZDEMO and match nothing
+            i = cols.index("data")
+            f[i] = re.sub(r'"value": "([a-z]{2})_MZ"', r'"value": "\1_%s"' % TENANT.upper(), f[i])
         out.write("\t".join(f) + "\n"); continue
     out.write(line)
 out.close()

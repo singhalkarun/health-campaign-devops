@@ -15,13 +15,14 @@ Edit SOURCES / MODULES below to change what is copied.
 import json, os, sys, time, urllib.parse, urllib.request, base64
 
 SRC = "https://health-demo.digit.org"
-# target locale -> list of (source tenant, source locale), lowest priority first
+# target locale -> list of (source tenant, source locale), lowest priority first.
+# The UIs append their localeRegion ("DEMO" in assets/deploy-assets.sh) to the language codes
+# in StateInfo, so the target tenant's locales are <lang>_DEMO. eGov's tenant `mz` has the
+# fullest set, `demo` its own overrides.
 SOURCES = {
-    "en_MZ":   [("mz", "en_MZ"), ("demo", "en_MZ")],
-    "pt_MZ":   [("mz", "pt_MZ"), ("demo", "pt_MZ")],
-    "fr_MZ":   [("mz", "fr_MZ"), ("demo", "fr_MZ")],
-    # Console/workbench/dashboard/payments use region DEMO; fill shared modules from en_MZ
     "en_DEMO": [("mz", "en_MZ"), ("demo", "en_MZ"), ("demo", "en_DEMO")],
+    "pt_DEMO": [("mz", "pt_MZ"), ("demo", "pt_MZ"), ("demo", "pt_DEMO")],
+    "fr_DEMO": [("mz", "fr_MZ"), ("demo", "fr_MZ"), ("demo", "fr_DEMO")],
 }
 MODULES = """rainmaker-common rainmaker-hcm-common rainmaker-hcm-dss rainmaker-workbench rainmaker-mdms
 rainmaker-campaignmanager rainmaker-microplanning rainmaker-dss rainmaker-common-masters rainmaker-core
@@ -87,6 +88,14 @@ def download(out):
 def upload(path, base, tenant):
     data = json.load(open(path))
     data = {loc: dedupe(ms) for loc, ms in data.items()}
+    # public.message.message is varchar(500); a few eGov texts are longer. Widen the column
+    # (README 5.1) or they are skipped here.
+    limit = int(os.environ.get("MAX_MESSAGE_LEN", "500"))
+    for loc, ms in data.items():
+        long_ = [x["code"] for x in ms if len(x["message"]) > limit]
+        if long_:
+            print(f"{loc}: skipping {len(long_)} messages longer than {limit} chars", flush=True)
+            data[loc] = [x for x in ms if len(x["message"]) <= limit]
     tok = post(f"{base}/user/oauth/token",
                {"username": os.environ["HCM_USER"], "password": os.environ["HCM_PASSWORD"],
                 "grant_type": "password", "scope": "read", "tenantId": tenant, "userType": "EMPLOYEE"},
